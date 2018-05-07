@@ -1,0 +1,238 @@
+---
+title: "Technical Assessment"
+author: "Lingjie Wang"
+date: "5/1/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r libraries}
+##load any librarys you may need.  tidyverse has already been loaded here for you
+libraries <- c("tidyverse","gridExtra","pracma","PK","pkr")
+for (l in libraries) {
+  suppressPackageStartupMessages(library(l, character.only = TRUE))
+}
+```
+
+
+## Instructions
+
+This is an assessment project to be completed by prospective candidates looking to apply to the Biometrics Department at Denali Therapeutics.  The assessment is intended to take between 30-60 minutes to complete and is aimed at assessing required technical skills.  Please feel free to include more comprehensive or alternative approaches as you deem fit.  Completed report should be in html format.  Please create a **new github repository** to share your work with us. 
+
+
+
+## Data 
+Start by loading the dataset Theoph.  This is data relating to a pharmacokinetics experiment of the anti-asthmatic drug theophylline.  
+
+
+```{r DataLoad}
+data(Theoph)
+```
+
+To add a bit more complexity, we will introduce a hypothetical demographics dataset characterizing the subjects.
+
+```{r demographics}
+## please add any corresponding data cleanup as needed
+dm <- read.csv("~/Downloads/dm.csv",header = T, stringsAsFactors = F)
+summary(dm)
+head(dm,5)
+
+## data cleaning for column SEX: set Male to M, Female to F
+distinct(dm, SEX)
+dm[dm$SEX == 'Male',]$SEX <- 'M'
+dm[dm$SEX == 'Female',]$SEX <- 'F'
+
+## data cleaning for column Age: summary to check variations, remove unwanted characters, lowercase for all, transform to year, keep numeric value
+# one row of age 43.3 without age unit; remove for now
+for (i in 1:nrow(dm)) {
+  num <- as.numeric(str_extract(dm$Age[i],"[\\.0-9]+"))
+  unit <- str_extract(tolower(dm$Age[i]),"years|months|weeks")
+  if(!is.na(unit)){
+    if(unit == 'months'){
+      num <- round(num/12,1)
+    }else if(unit=='weeks'){
+      num <- round(num/52,1)
+    }
+  }else{
+    num <- NA
+  }
+  dm$Age[i] <- num
+}
+dm <- filter(dm, !is.na(Age))
+dm$Age <- as.numeric(dm$Age)
+
+## check data; found one outlier of age 636 years; without further information, remove for now
+dm <- filter(dm, Age < 150)
+```
+
+**Please characterize and provide a summary of the data stratefied by gender.**
+
+*Hint:  Don't forget to also include characterization of age, weight and peak concentrations.*
+
+```{r summary}
+## input characterization and summary data code here.
+# concerning dm of subject
+male <- filter(dm, SEX == 'M')
+female <- filter(dm, SEX == 'F')
+summary(male)
+# hist(male$Age)
+summary(female)
+# hist(female$Age)
+
+# var(male$Age)
+# var(female$Age)
+
+# 6 male subjects, age from 32.8 to 56.5 with average 46, no subjects between 35~45;
+# 4 female subjects, age from 41.7 to 66 with avergae 48.15, no subjects between 45~65 (3 between 40~45, 1 between 65~70)
+
+# merge dm data with Theoph data; separate by gender
+total <- merge(Theoph,dm, by.x = 'Subject',by.y = 'SUBJECT')
+female_new <- filter(total, SEX == 'F')
+male_new <- filter(total, SEX =='M')
+
+summary(female_new)
+summary(male_new)
+# female: 
+# weight ranging from 64.6 to 86.4 with average 73; dose given ranging from 3.1 to 4.95 with average of 4.3; correlation between dose and Wt is -0.999, larger weight was given less dose; concentration were checked from time 0.00 to roughly 24.00; concentration ranging from 0.00 to 9.03.
+# male:
+# weight ranging from 54.6 to 79.6 with average 66.3; dose given ranging from 4.02 to 5.86 with average 4.9, higher than that of female subjects;correlation between dose and Wt is -0.996, larger weight was given less dose; concentration were checked from time 0.00 to roughly 24.00; concentration ranging from 0.00 to 11.4.
+
+# function to subset rows with beginning and peak concentrations
+subsets <- function(data,conc){
+  if(conc == 'peak'){
+  data <- data %>% 
+    group_by(Subject) %>%
+    filter(conc == max(conc))
+  }else if(conc == 'start'){
+    data <- data %>%
+      group_by(Subject) %>%
+      filter(Time == min(Time))
+  }
+  return(data)
+}
+
+# begining concentrations
+female_start <- subsets(female_new,'start')
+male_start <- subsets(male_new,'start')
+# peak concentrations
+total_peak <- subsets(total,'peak')
+female_peak <- subsets(female_new,'peak')
+male_peak <- subsets(male_new,'peak')
+
+summary(female_peak)
+summary(male_peak)
+# plot(female_new$Time,female_new$conc)
+# plot(male_new$Time,male_new$conc)
+
+cor(female_peak$Wt,female_peak$Dose)
+cor(male_peak$Wt,male_peak$Dose)
+
+# Concentration: all subjects' begining concentration is less than 1, and most are 0. Peak concentration of female subjects ranging 7.09 to 9.03 with average of 7.97, while male ranging from 8.33 to 11.4 with average of 9.80, higher than female. For both female and male subjects, after giving dose, the concentration first increasing till reach the peak concentration then decreasing. For both genders, the peak concentration detected within 3.6 time units.
+```
+
+In total, after data cleaning, there are 6 male subjects and 4 female subjects. Ages of male subjects range from 32.8 to 56.5 with an average of 46, none of which between 35 - 45; ages of female subjects ranges from 41.7 to 66 with an avergae of 48.15, none of which subjects between 45 - 65. Concerning weights, female subjects'weights range from 64.6 to 86.4 with an average of 73, while those of male subjects range from 54.6 to 79.6 with an average of 66.3.
+
+Concerning dose, dose given to female subjects ranging from 3.1 to 4.95 with an average of 4.3, and the correlation between dose and Wt is -0.999, implying larger weight was given less dose. For male subjects, dose given ranging from 4.02 to 5.86 with an average of 4.9, which is higher than that of female subjects. Similarly, the correlation between dose given to male subjects and Wt is -0.996, implying larger weight was given less dose.
+
+Concerning concentration, the beginning concentrations of all subjects were less than 1  with most of them (7/10) to be 0. Concentrations were measured from time 0.00 to roughly 24.00. For female subjects, concentrations measured range from 0.00 to 9.03, while for male subjects from 0.00 to 11.4. Peak concentrations of female subjects range from 7.09 to 9.03 with an average of 7.97, while male ranging from 8.33 to 11.4 with average of 9.80, which is higher than that of female subjects. For both female and male subjects, after giving dose, the concentration first increased to the peak concentration then decreased. For both genders, the peak concentration appeared within 3.6 time units.
+
+## Visualization
+
+You need to convey the data in a presentation.  Please generate figures to convey the data we have captured.  Pay particular attention to showing concentration change over time as this is a PK experiment.  Please take time to make the figure as informative as possible. Feel free to use more than one figure if needed but bear in mind that this is a presentation so fewer figures to convey the information is a plus.  Bonus points for interactivity!
+
+```{r visualization}
+## input visualization code here
+# for dm data: Wt, Age by gender; histogram, boxplot
+dm_new <- distinct(select(total, Subject,Wt,SEX,Age))
+# histogram
+histogram <- function(col){
+  ggplot(data = dm_new,aes_string(col,fill = 'SEX')) +
+  geom_histogram(alpha=0.6,position = 'identity',bins = 10) +
+  facet_grid(.~SEX)
+}
+age <- histogram('Age')
+weight <- histogram('Wt')
+grid.arrange(age,weight,top = 'Histogram: Age and Weight')
+
+# boxplot
+age_box <- ggplot(data = dm_new,aes(y=Age,x=SEX)) +
+  geom_boxplot()
+weight_box <- ggplot(data = dm_new,aes(y=Wt,x=SEX)) +
+  geom_boxplot()
+grid.arrange(age_box,weight_box,nrow = 1, top = 'Boxplot: Age and Weight')
+
+# for total data: scatter plot for dose vs weight
+ggplot(data = total,aes(x = Wt,y = Dose,color = SEX))+
+  geom_point() +
+  labs(title = 'Scatterplot: Dose vs. Wt')
+
+# for total data: concentration over time
+ggplot() +
+  geom_line(data = total, aes(x = Time, y = conc, color = Subject)) +
+  geom_point(data = total, aes(x = Time, y = conc, color = Subject)) +
+  geom_point(data = total_peak, aes(x = Time, y = conc),shape = 2,size = 2.5) +
+  ylim(0,12) +
+  facet_grid(.~SEX) +
+  labs(title = 'Concentration Change Over Time',
+    caption = "Concentration change over time by gender. Triangle points represent peak concentrations.")
+```
+
+## Analysis
+Next, we would like to estimate the PK property, area under the curve (AUC), for the drug based on the available data.  Please provide an **estimate** along with **associated variability**.  Explain in detail any imputations or assumptions that were made.  
+
+```{r AUC}
+## input code for estimating AUC here.
+# calculate AUC with linear and log trapezoid method; calculate AUC(0-t), and code for calculating AUC(0-inf) is in comment in cal_auc function; calculate AUC for all subjects, use average as a final estimate, and calculate variance
+
+# code for calculating AUC with linear trapezoid method
+subjects <- dm$SUBJECT
+subjects <- as.character(subjects)
+batches <- lapply(subjects, function(x) filter(total, Subject == x) %>% 
+                                      arrange(Time) %>%
+                                      select(Time,conc))
+names(batches) <- subjects
+
+cal_auc <- function(x,inf = FALSE){
+  auc_sub <- 0
+  len <- length(batches[[x]][['Time']])
+  for (i in 2:len) {
+    time1 <- batches[[x]][['Time']][i-1]
+    time2 <- batches[[x]][['Time']][i]
+    conc1 <- batches[[x]][['conc']][i-1]
+    conc2 <- batches[[x]][['conc']][i]
+    adds <- 0.5*(conc1 + conc2)*(time2 - time1)
+    auc_sub <- auc_sub + adds
+  }
+  if(inf){
+    model <- nls(formula = conc ~ c0 * exp(1)^(-k * Time),
+               data = total,
+               start = list(c0 = 0.1, k = 0.1))
+    k <- summary(model)$parameters[2,1]
+    adds_final <- batches[[x]][['conc']][len]/k
+    auc_sub <- auc_sub + adds_final
+  }
+  return(auc_sub)
+}
+auc_calculated <- unlist(lapply(subjects, cal_auc))
+
+# with AUC function from pkr package
+subjects <- as.numeric(subjects)
+linear_aucs <- unlist(lapply(1:length(subjects), 
+                             function(x) AUC(batches[[x]][[1]],batches[[x]][[2]],fit = 'Linear')[11,1]))
+log_aucs <- unlist(lapply(1:length(subjects), 
+                          function(x) AUC(batches[[x]][[1]],batches[[x]][[2]],fit = 'Log')[11,1]))
+
+# linear_aucs results same as in approach 1
+
+# final estimate and variance
+linear_est <- mean(linear_aucs)
+linear_var <- var(linear_aucs)
+
+linear_est
+linear_var
+```
+AUC for each subject has been calculated with linear and log trapezoid method. Currently AUC(0-t) has been calculated, and calculating AUC(0-inf) can be done if setting the inf argument in cal_auc function to be TRUE. After calculating AUC for all subjects, the average of AUC calculated from linear trapezoid method is used as a final estimate, and variance has been calculated.
+
+The estimate is 109.1812, and the variance of all subjects' AUC is 488.5581.
